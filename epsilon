@@ -1,0 +1,102 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  dev
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      epsilon;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -3 0 0 0 0]; // turbulent kinetic energy dissipation rate in m^2/s^3
+
+internalField   uniform 0.00613;
+
+boundaryField
+{
+    #includeEtc "caseDicts/setConstraintTypes"
+
+    lowerWall
+    {
+        type            epsilonWallFunction;
+        value           uniform 0.00613;
+    }
+
+    topSurface
+    {
+		type            codedFixedValue;//changing with kf and the average distance from the nearest wall y_2
+		patchType		symmetryPlane;
+		value           uniform 0.00613;
+		name		    myEpsilonFS;// Name of generated boundary condition, previously directType
+		
+		code // applicable for half width of a rectangular or square channel
+		#{
+			const volScalarField& eps = this->db().lookupObject<volScalarField>("epsilon");
+			const fvMesh& mesh = eps.mesh();
+			const dimensionedScalar h = max(mesh.Cf().component(1));//flow depth in m
+			const dimensionedScalar b = 2.0*max(mag(mesh.Cf().component(2))); // channel width in m. half channel width is simulated along the -z direction
+			const fvPatch& boundaryPatch = this->patch();
+			const vectorField& Cf = boundaryPatch.Cf();// face center coordinates for the patch
+			const fvPatchSymmTensorField& Rp = boundaryPatch.lookupPatchField<volSymmTensorField, symmTensor>("R");// calling R for the patch
+			fvPatchScalarField& epsilon = *this;
+			
+			forAll(Cf, facei)
+			{
+				scalar zf = Cf[facei].z();// lateral coordinate of the face center
+				scalar h1 = h.value();
+				scalar b1 = b.value();
+				scalar y_1 = 0.07*h1;
+				scalar z_1 = 0.5*b1 - mag(zf);// horizontal distance between the left wall and the cell center 
+				scalar z_2 = b1 - z_1;// horz. distance between the cell center and right wall (l - z)
+				scalar kf = 0.5*tr(Rp[facei]);// turbulent kinetic energy at the facei
+				if (z_1 <= h1) //nearest wall is the left wall
+				{
+					scalar y_2 = sqrt((3.1416*sqr(z_1))/(atan(h1/z_1) + 1.0/(z_1/h1 + h1/z_1)));// average distance for l-x = h
+					epsilon[facei] = 0.401*pow(kf, 1.5)*(1.0/y_1 + 1.0/y_2);
+				}
+				else //nearest wall is the bed
+				{
+					scalar y_2 = sqrt((3.1416*sqr(h1))/(atan(mag(z_2)/h1) + atan(z_1/h1) + 1.0/(h1/mag(z_2) + mag(z_2)/h1) + 1.0/(h1/z_1 + z_1/h1)));
+					epsilon[facei] = 0.401*pow(kf, 1.5)*(1.0/y_1 + 1.0/y_2);
+				}
+			}
+			// epsilon (free surface) = 0.401*k(free surface)^3/2*(1/y'+1/y*); see Naot and Rodi (1982). Here, Cmu^0.75/kappa = 0.401;
+		#};
+
+		codeOptions
+			#{
+				-I$(LIB_SRC)/finiteVolume/lnInclude\
+				-I$(LIB_SRC)/meshTools/lnInclude\
+			#};
+			
+		codeInclude
+			#{
+				#include "fvCFD.H"
+				#include <cmath>
+				#include <iostream>
+			#};
+			
+		codeLibs 
+			#{ -lfiniteVolume -lmeshTools 
+			#};
+	}
+    leftWall
+    {
+		type            epsilonWallFunction;
+        value           uniform 0.00613;
+    }
+	
+	rightSymmetry
+    {
+        type            symmetryPlane;
+    }
+}
+
+
+// ************************************************************************* //
