@@ -11,4 +11,4 @@ in OpenFOAM-10 also.
 
 For more details follow the manuscript titled 
 "Reynolds Stress Modeling of Supercritical Narrow Channel Flows using OpenFOAM: Secondary Currents and Turbulent Flow Characteristics"
-accepted in Physics of Fluids journal.
+accepted in Physics of Fluids journal. https://doi.org/10.1063/5.0124076
